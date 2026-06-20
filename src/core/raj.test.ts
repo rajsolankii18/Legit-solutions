@@ -24,7 +24,7 @@ describe('RAJ conversion', () => {
     expect(output.fileName).toBe('404.vcf')
     expect(output.contactCount).toBe(2)
     expect(output.skippedCount).toBe(1)
-    expect(output.content).toContain('FN:RAJ-001')
+    expect(output.content).not.toContain('FN:')
     expect(output.content).toContain('N:;;RAJ-002;;;')
     expect(output.content).toContain('TEL;TYPE=CELL:9876543210')
   })
@@ -81,7 +81,8 @@ describe('RAJ conversion', () => {
       },
     )
 
-    expect(output.content).toContain('FN:MANUAL-001')
+    expect(output.content).not.toContain('FN:')
+    expect(output.content).toContain('N:;;MANUAL-001;;;')
   })
 
   it('supports sequential contact bases using the file index', () => {
@@ -96,8 +97,8 @@ describe('RAJ conversion', () => {
       },
     )
 
-    expect(outputs[0].content).toContain('FN:BASE5-001')
-    expect(outputs[1].content).toContain('FN:BASE6-001')
+    expect(outputs[0].content).toContain('N:;;BASE5-001;;;')
+    expect(outputs[1].content).toContain('N:;;BASE6-001;;;')
   })
 
   it('supports alphabetic contact bases', () => {
@@ -112,8 +113,8 @@ describe('RAJ conversion', () => {
       },
     )
 
-    expect(outputs[0].content).toContain('FN:AA-001')
-    expect(outputs[1].content).toContain('FN:AB-001')
+    expect(outputs[0].content).toContain('N:;;AA-001;;;')
+    expect(outputs[1].content).toContain('N:;;AB-001;;;')
   })
 
   it('matches the legacy alphabetic generator shape', () => {

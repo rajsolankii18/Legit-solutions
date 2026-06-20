@@ -11,7 +11,7 @@ export function writeVcfContacts(
   options: { nameLineMode?: VcfNameLineMode } = {},
 ) {
   const lines: string[] = []
-  const nameLineMode = options.nameLineMode ?? 'standard'
+  const nameLineMode = options.nameLineMode ?? 'legacy-n-only'
 
   for (const contact of contacts) {
     const name = escapeVcfText(contact.name)
@@ -86,20 +86,15 @@ export function replaceNameInVcfBlock(block: string, name: string) {
   const escaped = escapeVcfText(name)
   const lines = block.trimEnd().split(/\r?\n/)
   let replacedN = false
-  let replacedFn = false
   const output: string[] = []
 
   for (const line of lines) {
     if (line.toUpperCase().startsWith('FN:')) {
-      output.push(`FN:${escaped}`)
-      replacedFn = true
       continue
     }
     if (line.startsWith('N:;;')) {
-      if (!replacedFn) output.push(`FN:${escaped}`)
       output.push(`N:;;${escaped};;;`)
       replacedN = true
-      replacedFn = true
       continue
     }
     output.push(line)
@@ -108,7 +103,7 @@ export function replaceNameInVcfBlock(block: string, name: string) {
   if (!replacedN) {
     const endIndex = output.findIndex((line) => line.trim().toUpperCase() === 'END:VCARD')
     const insertAt = endIndex >= 0 ? endIndex : output.length
-    output.splice(insertAt, 0, `FN:${escaped}`, `N:;;${escaped};;;`)
+    output.splice(insertAt, 0, `N:;;${escaped};;;`)
   }
 
   return `${output.join('\n')}\n`

@@ -41,8 +41,9 @@ describe('VCF tools', () => {
     })
 
     expect(outputs.map((file) => file.fileName)).toEqual(['B03.vcf', 'B04.vcf'])
-    expect(outputs[0].content).toContain('FN:ONE3-001')
-    expect(outputs[1].content).toContain('FN:TWO4-001')
+    expect(outputs[0].content).not.toContain('FN:')
+    expect(outputs[0].content).toContain('N:;;ONE3-001;;;')
+    expect(outputs[1].content).toContain('N:;;TWO4-001;;;')
   })
 
   it('converts VCF files to TXT', () => {
@@ -68,8 +69,9 @@ describe('VCF tools', () => {
 
     expect(outputs[0].content).toContain('ADMIN - B7-001')
     expect(outputs[0].content).toContain('NAVY - B7-001')
-    expect(outputs[0].content).toContain('FN:B7-001')
-    expect(outputs[0].content).toContain('FN:B7-002')
+    expect(outputs[0].content).not.toContain('FN:')
+    expect(outputs[0].content).toContain('N:;;B7-001;;;')
+    expect(outputs[0].content).toContain('N:;;B7-002;;;')
   })
 
   it('renames starting contacts with a single base', () => {
@@ -78,8 +80,9 @@ describe('VCF tools', () => {
       { mode: 'single', renameCount: 1, baseName: 'ADMIN' },
     )
 
-    expect(outputs[0].content).toContain('FN:ADMIN-001')
-    expect(outputs[0].content).toContain('FN:TWO-001')
+    expect(outputs[0].content).not.toContain('FN:')
+    expect(outputs[0].content).toContain('N:;;ADMIN-001;;;')
+    expect(outputs[0].content).toContain('N:;;TWO-001;;;')
   })
 
   it('renames starting contacts with admin/navy groups', () => {
