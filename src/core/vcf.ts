@@ -4,22 +4,34 @@ export type VcfContact = {
   block?: string
 }
 
-export function writeVcfContacts(contacts: VcfContact[]) {
+export type VcfNameLineMode = 'standard' | 'legacy-n-only'
+
+export function writeVcfContacts(
+  contacts: VcfContact[],
+  options: { nameLineMode?: VcfNameLineMode } = {},
+) {
   const lines: string[] = []
+  const nameLineMode = options.nameLineMode ?? 'standard'
 
   for (const contact of contacts) {
     const name = escapeVcfText(contact.name)
-    lines.push(
-      'BEGIN:VCARD',
-      'VERSION:3.0',
-      `FN:${name}`,
-      `N:;;${name};;;`,
-      `TEL;TYPE=CELL:${contact.phone}`,
-      'END:VCARD',
-    )
+    lines.push('BEGIN:VCARD', 'VERSION:3.0')
+    if (nameLineMode === 'standard') lines.push(`FN:${name}`)
+    lines.push(`N:;;${name};;;`, `TEL;TYPE=CELL:${contact.phone}`, 'END:VCARD')
   }
 
   return `${lines.join('\n')}${lines.length ? '\n' : ''}`
+}
+
+export function formatVcfNameLines(text: string, nameLineMode: VcfNameLineMode) {
+  if (nameLineMode === 'standard') return text
+
+  return extractVcfBlocks(text)
+    .map((block) => {
+      const lines = block.trimEnd().split(/\r?\n/)
+      return `${lines.filter((line) => !line.toUpperCase().startsWith('FN:')).join('\n')}\n`
+    })
+    .join('')
 }
 
 export function escapeVcfText(value: string) {

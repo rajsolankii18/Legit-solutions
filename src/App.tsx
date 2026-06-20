@@ -43,6 +43,7 @@ import {
   renameStartingContactsInVcfFiles,
   splitVcfFilesRough,
 } from './core/vcfTools'
+import { formatVcfNameLines, type VcfNameLineMode } from './core/vcf'
 
 type ToolId =
   | 'raj'
@@ -201,6 +202,7 @@ function App() {
   const [phoneCleanMode, setPhoneCleanMode] = useState<PhoneCleanMode>('smart')
   const [duplicatePolicy, setDuplicatePolicy] = useState<RajDuplicatePolicy>('skip-across-job')
   const [includeReports, setIncludeReports] = useState(true)
+  const [vcfNameLineMode, setVcfNameLineMode] = useState<VcfNameLineMode>('legacy-n-only')
   const [txtSplitMode, setTxtSplitMode] = useState<TxtSplitOptions['mode']>('fixed')
   const [txtLinesPerFile, setTxtLinesPerFile] = useState('100')
   const [txtFirstPartLines, setTxtFirstPartLines] = useState('500')
@@ -542,6 +544,8 @@ function App() {
           navyCount: renameNavyCount,
         }))
       }
+
+      nextOutputs = applyVcfNameLineMode(nextOutputs, vcfNameLineMode)
 
       for (const output of nextOutputs) {
         const skipped = output.skippedCount ? `, ${output.skippedCount} skipped` : ''
@@ -972,6 +976,11 @@ function App() {
                   onIncludeReportsChange={setIncludeReports}
                 />
 
+                <VcfNameLineModeSelect
+                  value={vcfNameLineMode}
+                  onChange={setVcfNameLineMode}
+                />
+
                 <PostGenerationRenameControls
                   enabled={renameAfterCreate}
                   onEnabledChange={setRenameAfterCreate}
@@ -1216,6 +1225,10 @@ function App() {
                     includeReports={includeReports}
                     onIncludeReportsChange={setIncludeReports}
                   />
+                  <VcfNameLineModeSelect
+                    value={vcfNameLineMode}
+                    onChange={setVcfNameLineMode}
+                  />
                   <PostGenerationRenameControls
                     enabled={renameAfterCreate}
                     onEnabledChange={setRenameAfterCreate}
@@ -1352,6 +1365,11 @@ function App() {
                         onDuplicatePolicyChange={setDuplicatePolicy}
                         includeReports={includeReports}
                         onIncludeReportsChange={setIncludeReports}
+                      />
+
+                      <VcfNameLineModeSelect
+                        value={vcfNameLineMode}
+                        onChange={setVcfNameLineMode}
                       />
 
                       <label className="flex items-center gap-2 text-sm font-medium text-slate-700">
@@ -1916,6 +1934,31 @@ function PostGenerationRenameControls({
   )
 }
 
+function VcfNameLineModeSelect({
+  value,
+  onChange,
+}: {
+  value: VcfNameLineMode
+  onChange: (value: VcfNameLineMode) => void
+}) {
+  return (
+    <label className="block rounded-xl border border-teal-200 bg-teal-50/70 p-3 text-sm font-medium text-slate-700">
+      VCF contact name lines
+      <select
+        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+        value={value}
+        onChange={(event) => onChange(event.target.value as VcfNameLineMode)}
+      >
+        <option value="legacy-n-only">Compact old style: N line only</option>
+        <option value="standard">Standard vCard: FN + N lines</option>
+      </select>
+      <span className="mt-2 block text-xs font-normal leading-5 text-teal-900">
+        Compact mode removes the extra FN display-name line so each contact name appears once in the file.
+      </span>
+    </label>
+  )
+}
+
 function PowerFilters({
   idPrefix,
   phoneCleanMode,
@@ -2271,6 +2314,18 @@ function renameGeneratedVcfOutputs(
   )
 
   return [...renamedVcfOutputs, ...otherOutputs]
+}
+
+function applyVcfNameLineMode(files: GeneratedFile[], nameLineMode: VcfNameLineMode) {
+  if (nameLineMode === 'standard') return files
+
+  return files.map((file) => {
+    if (file.kind !== 'vcf') return file
+    return {
+      ...file,
+      content: formatVcfNameLines(file.content, nameLineMode),
+    }
+  })
 }
 
 function composeSplitOutputsWithSource(
