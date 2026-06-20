@@ -238,11 +238,11 @@ function App() {
   const [activeTxtEditorKey, setActiveTxtEditorKey] = useState('')
   const [selectedTextCount, setSelectedTextCount] = useState(0)
   const [expandedToolId, setExpandedToolId] = useState<ToolId | null>(null)
+  const [workspaceView, setWorkspaceView] = useState<'workbench' | 'tool'>('workbench')
   const [previewFileName, setPreviewFileName] = useState('')
   const [jobLines, setJobLines] = useState<string[]>(logLines)
   const [isProcessing, setIsProcessing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const taskPanelRef = useRef<HTMLDivElement | null>(null)
   const txtFiles = selectedFiles.filter((file) => file.name.toLowerCase().endsWith('.txt'))
   const vcfFiles = selectedFiles.filter((file) => file.name.toLowerCase().endsWith('.vcf'))
   const excelFiles = selectedFiles.filter((file) => {
@@ -297,16 +297,10 @@ function App() {
 
   function selectWorkbenchTool(tool: Tool) {
     setActiveTool(tool.id)
+    setWorkspaceView('tool')
     setOutputFiles([])
     setPreviewFileName('')
     setJobLines([`Selected tool: ${tool.title}`])
-
-    window.setTimeout(() => {
-      taskPanelRef.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'start',
-      })
-    }, 80)
   }
 
   async function addFiles(fileList: FileList | null) {
@@ -636,75 +630,110 @@ function App() {
         </div>
       </section>
 
-      <section className="mobile-safe-x mx-auto grid w-full max-w-[96rem] gap-4 py-4 lg:grid-cols-[0.75fr_1.35fr] xl:grid-cols-[0.7fr_1.5fr]">
-        <div className="space-y-4">
-          <Panel title="Workflow" icon={<ClipboardList className="h-5 w-5" />}>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
-              <WorkflowStep icon={<FileInput />} title="1. Add files" text="TXT, VCF, or paste numbers." />
-              <WorkflowStep icon={<ListChecks />} title="2. Configure" text="Naming, split size, merge mode." />
-              <WorkflowStep icon={<Files />} title="3. Preview" text="Counts, skipped lines, output names." />
-              <WorkflowStep icon={<FileArchive />} title="4. Export" text="Download ZIP or selected files." />
-            </div>
-          </Panel>
+      <section
+        className={[
+          'mobile-safe-x mx-auto grid w-full max-w-[96rem] gap-4 py-4',
+          workspaceView === 'workbench'
+            ? 'lg:grid-cols-[0.75fr_1.35fr] xl:grid-cols-[0.7fr_1.5fr]'
+            : 'lg:grid-cols-1',
+        ].join(' ')}
+      >
+        {workspaceView === 'workbench' && (
+          <div className="space-y-4">
+            <Panel title="Workflow" icon={<ClipboardList className="h-5 w-5" />}>
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
+                <WorkflowStep icon={<FileInput />} title="1. Add files" text="TXT, VCF, or paste numbers." />
+                <WorkflowStep icon={<ListChecks />} title="2. Configure" text="Naming, split size, merge mode." />
+                <WorkflowStep icon={<Files />} title="3. Preview" text="Counts, skipped lines, output names." />
+                <WorkflowStep icon={<FileArchive />} title="4. Export" text="Download ZIP or selected files." />
+              </div>
+            </Panel>
 
-          <Panel title="Conversion Workbench" icon={<GitMerge className="h-5 w-5" />}>
-            <div className="grid gap-3 md:grid-cols-2">
-              {tools.map((tool) => {
-                const isExpanded = expandedToolId === tool.id
-                const isSelected = activeTool === tool.id
-                return (
-                  <div
-                    key={tool.title}
-                    role="button"
-                    tabIndex={0}
-                    className={getToolButtonClassName(tool, activeTool)}
-                    onClick={() => selectWorkbenchTool(tool)}
-                    onKeyDown={(event) => {
-                      if (event.key !== 'Enter' && event.key !== ' ') return
-                      event.preventDefault()
-                      selectWorkbenchTool(tool)
-                    }}
-                  >
-                    <div className={getToolAccentClassName(tool.status)} />
-                    <div className="flex items-start justify-between gap-3">
-                      <h2 className="text-sm font-semibold text-slate-950">{tool.title}</h2>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        <span className={getStatusClassName(tool.status)}>
-                          {tool.status}
-                        </span>
-                        {isSelected && (
-                          <span className="rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm">
-                            Selected
+            <Panel title="Conversion Workbench" icon={<GitMerge className="h-5 w-5" />}>
+              <div className="grid gap-3 md:grid-cols-2">
+                {tools.map((tool) => {
+                  const isExpanded = expandedToolId === tool.id
+                  const isSelected = activeTool === tool.id
+                  return (
+                    <div
+                      key={tool.title}
+                      role="button"
+                      tabIndex={0}
+                      className={getToolButtonClassName(tool, activeTool)}
+                      onClick={() => selectWorkbenchTool(tool)}
+                      onKeyDown={(event) => {
+                        if (event.key !== 'Enter' && event.key !== ' ') return
+                        event.preventDefault()
+                        selectWorkbenchTool(tool)
+                      }}
+                    >
+                      <div className={getToolAccentClassName(tool.status)} />
+                      <div className="flex items-start justify-between gap-3">
+                        <h2 className="text-sm font-semibold text-slate-950">{tool.title}</h2>
+                        <div className="flex shrink-0 flex-col items-end gap-1">
+                          <span className={getStatusClassName(tool.status)}>
+                            {tool.status}
                           </span>
-                        )}
+                          {isSelected && (
+                            <span className="rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm">
+                              Selected
+                            </span>
+                          )}
+                        </div>
                       </div>
+                      <p className="mt-1.5 text-xs leading-5 text-slate-600">{tool.description}</p>
+                      <div className="mt-3 flex items-center justify-between gap-3">
+                        <button
+                          type="button"
+                          className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                          onClick={(event) => {
+                            event.stopPropagation()
+                            setExpandedToolId(isExpanded ? null : tool.id)
+                          }}
+                        >
+                          {isExpanded ? 'Hide details' : 'Read more'}
+                        </button>
+                      </div>
+                      {isExpanded && (
+                        <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs leading-5 text-slate-600">
+                          {tool.details}
+                        </p>
+                      )}
                     </div>
-                    <p className="mt-1.5 text-xs leading-5 text-slate-600">{tool.description}</p>
-                    <div className="mt-3 flex items-center justify-between gap-3">
-                      <button
-                        type="button"
-                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
-                        onClick={(event) => {
-                          event.stopPropagation()
-                          setExpandedToolId(isExpanded ? null : tool.id)
-                        }}
-                      >
-                        {isExpanded ? 'Hide details' : 'Read more'}
-                      </button>
-                    </div>
-                    {isExpanded && (
-                      <p className="mt-3 rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2 text-xs leading-5 text-slate-600">
-                        {tool.details}
-                      </p>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </Panel>
-        </div>
+                  )
+                })}
+              </div>
+            </Panel>
+          </div>
+        )}
 
-        <aside className="space-y-4">
+        <aside className={workspaceView === 'tool' ? 'space-y-4 lg:col-span-full' : 'space-y-4'}>
+          {workspaceView === 'tool' && (
+            <Panel title={activeToolDefinition.title} icon={<SlidersHorizontal className="h-5 w-5" />}>
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={getStatusClassName(activeToolDefinition.status)}>
+                      {activeToolDefinition.status}
+                    </span>
+                    <span className="rounded-full border border-teal-200 bg-teal-50 px-3 py-1 text-xs font-semibold text-teal-800">
+                      Saved VCF sources: {workspaceVcfCount}
+                    </span>
+                  </div>
+                  <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-600">
+                    {activeToolDefinition.description}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 active:scale-[0.98]"
+                  onClick={() => setWorkspaceView('workbench')}
+                >
+                  Back to workbench
+                </button>
+              </div>
+            </Panel>
+          )}
           <Panel title="Batch Preview" icon={<FileOutput className="h-5 w-5" />}>
             <div className="grid grid-cols-2 gap-3">
               <Metric label="Input files" value={String(selectedFiles.length)} />
@@ -840,10 +869,7 @@ function App() {
               </div>
             )}
 
-            <div
-              ref={taskPanelRef}
-              className="mt-4 scroll-mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-md shadow-slate-900/5 sm:scroll-mt-6"
-            >
+            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-md shadow-slate-900/5">
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-950 px-4 py-3 text-white">
                 <div className="flex items-center justify-between gap-3">
                   <div>
