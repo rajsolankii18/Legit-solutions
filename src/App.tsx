@@ -238,7 +238,8 @@ function App() {
   const [activeTxtEditorKey, setActiveTxtEditorKey] = useState('')
   const [selectedTextCount, setSelectedTextCount] = useState(0)
   const [expandedToolId, setExpandedToolId] = useState<ToolId | null>(null)
-  const [workspaceView, setWorkspaceView] = useState<'workbench' | 'tool'>('workbench')
+  const [activeTab, setActiveTab] = useState<'workbench' | ToolId>('workbench')
+  const [openToolTabs, setOpenToolTabs] = useState<ToolId[]>([])
   const [previewFileName, setPreviewFileName] = useState('')
   const [jobLines, setJobLines] = useState<string[]>(logLines)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -294,13 +295,30 @@ function App() {
   }))
   const rajPreview = rajPreviewFiles.length ? convertTxtFilesToRajVcf(rajPreviewFiles, rajOptions) : []
   const activeToolDefinition = tools.find((tool) => tool.id === activeTool) ?? tools[0]
+  const isWorkbenchTab = activeTab === 'workbench'
 
   function selectWorkbenchTool(tool: Tool) {
     setActiveTool(tool.id)
-    setWorkspaceView('tool')
+    setActiveTab(tool.id)
+    setOpenToolTabs((current) => current.includes(tool.id) ? current : [...current, tool.id])
     setOutputFiles([])
     setPreviewFileName('')
     setJobLines([`Selected tool: ${tool.title}`])
+  }
+
+  function switchToToolTab(toolId: ToolId) {
+    const tool = tools.find((item) => item.id === toolId)
+    if (!tool) return
+    setActiveTool(toolId)
+    setActiveTab(toolId)
+    setJobLines([`Selected tool: ${tool.title}`])
+  }
+
+  function closeToolTab(toolId: ToolId) {
+    setOpenToolTabs((current) => current.filter((id) => id !== toolId))
+    if (activeTab === toolId) {
+      setActiveTab('workbench')
+    }
   }
 
   async function addFiles(fileList: FileList | null) {
@@ -603,7 +621,12 @@ function App() {
         <div className="h-1 bg-gradient-to-r from-teal-600 via-sky-500 to-amber-500" />
         <div className="mobile-safe-x mx-auto flex w-full max-w-[96rem] flex-col gap-5 py-4 sm:py-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-4">
+            <button
+              type="button"
+              className="flex items-start gap-4 text-left"
+              onClick={() => setActiveTab('workbench')}
+              title="Go to workbench"
+            >
               <div className="hidden h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-teal-200 bg-teal-700 text-white shadow-lg shadow-teal-900/10 sm:flex">
                 <Zap className="h-7 w-7" />
               </div>
@@ -625,7 +648,53 @@ function App() {
                   and ZIP export.
                 </p>
               </div>
-            </div>
+            </button>
+          </div>
+          <div className="flex gap-2 overflow-x-auto rounded-xl border border-slate-200 bg-white/80 p-2 shadow-sm">
+            <button
+              type="button"
+              className={getAppTabClassName(activeTab === 'workbench')}
+              onClick={() => setActiveTab('workbench')}
+            >
+              Workbench
+            </button>
+            {openToolTabs.map((toolId) => {
+              const tool = tools.find((item) => item.id === toolId)
+              if (!tool) return null
+              const tabActive = activeTab === toolId
+              return (
+                <div
+                  key={toolId}
+                  className={[
+                    'inline-flex shrink-0 overflow-hidden rounded-lg border transition',
+                    tabActive
+                      ? 'border-teal-300 bg-teal-700 text-white shadow-md shadow-teal-900/10'
+                      : 'border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800',
+                  ].join(' ')}
+                >
+                  <button
+                    type="button"
+                    className="max-w-48 truncate px-4 py-2 text-sm font-semibold"
+                    onClick={() => switchToToolTab(toolId)}
+                  >
+                    {tool.title}
+                  </button>
+                  <button
+                    type="button"
+                    className={[
+                      'flex w-9 items-center justify-center border-l text-sm transition',
+                      tabActive
+                        ? 'border-white/20 text-white/80 hover:bg-white/10 hover:text-white'
+                        : 'border-slate-200 text-slate-500 hover:bg-slate-100 hover:text-slate-950',
+                    ].join(' ')}
+                    onClick={() => closeToolTab(toolId)}
+                    aria-label={`Close ${tool.title}`}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              )
+            })}
           </div>
         </div>
       </section>
@@ -633,12 +702,12 @@ function App() {
       <section
         className={[
           'mobile-safe-x mx-auto grid w-full max-w-[96rem] gap-4 py-4',
-          workspaceView === 'workbench'
+          isWorkbenchTab
             ? 'lg:grid-cols-[0.75fr_1.35fr] xl:grid-cols-[0.7fr_1.5fr]'
             : 'lg:grid-cols-1',
         ].join(' ')}
       >
-        {workspaceView === 'workbench' && (
+        {isWorkbenchTab && (
           <div className="space-y-4">
             <Panel title="Workflow" icon={<ClipboardList className="h-5 w-5" />}>
               <div className="grid grid-cols-2 gap-2 md:grid-cols-4 md:gap-3">
@@ -707,8 +776,8 @@ function App() {
           </div>
         )}
 
-        <aside className={workspaceView === 'tool' ? 'space-y-4 lg:col-span-full' : 'space-y-4'}>
-          {workspaceView === 'tool' && (
+        <aside className={!isWorkbenchTab ? 'space-y-4 lg:col-span-full' : 'space-y-4'}>
+          {!isWorkbenchTab && (
             <Panel title={activeToolDefinition.title} icon={<SlidersHorizontal className="h-5 w-5" />}>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
@@ -727,7 +796,7 @@ function App() {
                 <button
                   type="button"
                   className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 active:scale-[0.98]"
-                  onClick={() => setWorkspaceView('workbench')}
+                  onClick={() => setActiveTab('workbench')}
                 >
                   Back to workbench
                 </button>
@@ -2105,6 +2174,15 @@ function getStatusClassName(status: Tool['status']) {
   if (status === 'Builder') return `${base} border-teal-200 bg-teal-50 text-teal-800`
   if (status === 'Batch') return `${base} border-sky-200 bg-sky-50 text-sky-800`
   return `${base} border-amber-200 bg-amber-50 text-amber-800`
+}
+
+function getAppTabClassName(active: boolean) {
+  return [
+    'inline-flex shrink-0 items-center rounded-lg border px-4 py-2 text-sm font-semibold transition',
+    active
+      ? 'border-teal-300 bg-teal-700 text-white shadow-md shadow-teal-900/10'
+      : 'border-slate-200 bg-white text-slate-700 hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800',
+  ].join(' ')
 }
 
 function getToolButtonClassName(tool: Tool, activeTool: ToolId) {
