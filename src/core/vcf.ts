@@ -4,34 +4,15 @@ export type VcfContact = {
   block?: string
 }
 
-export type VcfNameLineMode = 'standard' | 'legacy-n-only'
-
-export function writeVcfContacts(
-  contacts: VcfContact[],
-  options: { nameLineMode?: VcfNameLineMode } = {},
-) {
+export function writeVcfContacts(contacts: VcfContact[]) {
   const lines: string[] = []
-  const nameLineMode = options.nameLineMode ?? 'legacy-n-only'
 
   for (const contact of contacts) {
     const name = escapeVcfText(contact.name)
-    lines.push('BEGIN:VCARD', 'VERSION:3.0')
-    if (nameLineMode === 'standard') lines.push(`FN:${name}`)
-    lines.push(`N:;;${name};;;`, `TEL;TYPE=CELL:${contact.phone}`, 'END:VCARD')
+    lines.push('BEGIN:VCARD', 'VERSION:3.0', `FN:${name}`, `TEL;TYPE=CELL:${contact.phone}`, 'END:VCARD')
   }
 
   return `${lines.join('\n')}${lines.length ? '\n' : ''}`
-}
-
-export function formatVcfNameLines(text: string, nameLineMode: VcfNameLineMode) {
-  if (nameLineMode === 'standard') return text
-
-  return extractVcfBlocks(text)
-    .map((block) => {
-      const lines = block.trimEnd().split(/\r?\n/)
-      return `${lines.filter((line) => !line.toUpperCase().startsWith('FN:')).join('\n')}\n`
-    })
-    .join('')
 }
 
 export function escapeVcfText(value: string) {
@@ -85,25 +66,29 @@ export function getVcfBlockName(block: string) {
 export function replaceNameInVcfBlock(block: string, name: string) {
   const escaped = escapeVcfText(name)
   const lines = block.trimEnd().split(/\r?\n/)
-  let replacedN = false
+  let replacedFn = false
   const output: string[] = []
 
   for (const line of lines) {
     if (line.toUpperCase().startsWith('FN:')) {
+      output.push(`FN:${escaped}`)
+      replacedFn = true
       continue
     }
     if (line.startsWith('N:;;')) {
-      output.push(`N:;;${escaped};;;`)
-      replacedN = true
+      if (!replacedFn) {
+        output.push(`FN:${escaped}`)
+        replacedFn = true
+      }
       continue
     }
     output.push(line)
   }
 
-  if (!replacedN) {
+  if (!replacedFn) {
     const endIndex = output.findIndex((line) => line.trim().toUpperCase() === 'END:VCARD')
     const insertAt = endIndex >= 0 ? endIndex : output.length
-    output.splice(insertAt, 0, `N:;;${escaped};;;`)
+    output.splice(insertAt, 0, `FN:${escaped}`)
   }
 
   return `${output.join('\n')}\n`

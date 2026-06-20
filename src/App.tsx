@@ -242,6 +242,7 @@ function App() {
   const [jobLines, setJobLines] = useState<string[]>(logLines)
   const [isProcessing, setIsProcessing] = useState(false)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const taskPanelRef = useRef<HTMLDivElement | null>(null)
   const txtFiles = selectedFiles.filter((file) => file.name.toLowerCase().endsWith('.txt'))
   const vcfFiles = selectedFiles.filter((file) => file.name.toLowerCase().endsWith('.vcf'))
   const excelFiles = selectedFiles.filter((file) => {
@@ -293,6 +294,20 @@ function App() {
   }))
   const rajPreview = rajPreviewFiles.length ? convertTxtFilesToRajVcf(rajPreviewFiles, rajOptions) : []
   const activeToolDefinition = tools.find((tool) => tool.id === activeTool) ?? tools[0]
+
+  function selectWorkbenchTool(tool: Tool) {
+    setActiveTool(tool.id)
+    setOutputFiles([])
+    setPreviewFileName('')
+    setJobLines([`Selected tool: ${tool.title}`])
+
+    window.setTimeout(() => {
+      taskPanelRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    }, 80)
+  }
 
   async function addFiles(fileList: FileList | null) {
     if (!fileList) return
@@ -636,39 +651,39 @@ function App() {
             <div className="grid gap-3 md:grid-cols-2">
               {tools.map((tool) => {
                 const isExpanded = expandedToolId === tool.id
+                const isSelected = activeTool === tool.id
                 return (
                   <div
                     key={tool.title}
                     role="button"
                     tabIndex={0}
                     className={getToolButtonClassName(tool, activeTool)}
-                    onClick={() => {
-                      setActiveTool(tool.id)
-                      setOutputFiles([])
-                      setPreviewFileName('')
-                      setJobLines([`Selected tool: ${tool.title}`])
-                    }}
+                    onClick={() => selectWorkbenchTool(tool)}
                     onKeyDown={(event) => {
                       if (event.key !== 'Enter' && event.key !== ' ') return
                       event.preventDefault()
-                      setActiveTool(tool.id)
-                      setOutputFiles([])
-                      setPreviewFileName('')
-                      setJobLines([`Selected tool: ${tool.title}`])
+                      selectWorkbenchTool(tool)
                     }}
                   >
                     <div className={getToolAccentClassName(tool.status)} />
                     <div className="flex items-start justify-between gap-3">
                       <h2 className="text-sm font-semibold text-slate-950">{tool.title}</h2>
-                      <span className={getStatusClassName(tool.status)}>
-                        {tool.status}
-                      </span>
+                      <div className="flex shrink-0 flex-col items-end gap-1">
+                        <span className={getStatusClassName(tool.status)}>
+                          {tool.status}
+                        </span>
+                        {isSelected && (
+                          <span className="rounded-full bg-teal-700 px-2 py-0.5 text-[10px] font-bold uppercase text-white shadow-sm">
+                            Selected
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <p className="mt-1.5 text-xs leading-5 text-slate-600">{tool.description}</p>
                     <div className="mt-3 flex items-center justify-between gap-3">
                       <button
                         type="button"
-                    className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
+                        className="rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:border-teal-200 hover:bg-teal-50 hover:text-teal-800"
                         onClick={(event) => {
                           event.stopPropagation()
                           setExpandedToolId(isExpanded ? null : tool.id)
@@ -825,7 +840,10 @@ function App() {
               </div>
             )}
 
-            <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-md shadow-slate-900/5">
+            <div
+              ref={taskPanelRef}
+              className="mt-4 scroll-mt-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-md shadow-slate-900/5 sm:scroll-mt-6"
+            >
               <div className="mb-4 rounded-xl border border-slate-200 bg-slate-950 px-4 py-3 text-white">
                 <div className="flex items-center justify-between gap-3">
                   <div>
@@ -2066,9 +2084,11 @@ function getStatusClassName(status: Tool['status']) {
 function getToolButtonClassName(tool: Tool, activeTool: ToolId) {
   const active = activeTool === tool.id
   return [
-    'group relative cursor-pointer overflow-hidden rounded-lg border bg-white p-3 text-left transition duration-200',
+    'group relative cursor-pointer overflow-hidden rounded-lg border p-3 text-left transition duration-200',
     'hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-lg hover:shadow-slate-900/5',
-    active ? 'border-teal-300 shadow-md shadow-teal-900/10 ring-2 ring-teal-100' : 'border-slate-200',
+    active
+      ? 'border-teal-500 bg-gradient-to-br from-teal-50 via-white to-amber-50 shadow-xl shadow-teal-900/15 ring-2 ring-teal-300'
+      : 'border-slate-200 bg-white',
   ].join(' ')
 }
 

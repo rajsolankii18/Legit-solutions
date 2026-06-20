@@ -1,23 +1,22 @@
 import { describe, expect, it } from 'vitest'
-import { formatVcfNameLines, writeVcfContacts } from './vcf'
+import { replaceNameInVcfBlock, writeVcfContacts } from './vcf'
 
 describe('VCF writer', () => {
-  it('can write compact legacy N-only contacts', () => {
-    const content = writeVcfContacts(
-      [{ name: 'GL10-001', phone: '573138497058' }],
-      { nameLineMode: 'legacy-n-only' },
-    )
+  it('writes FN-only contacts', () => {
+    const content = writeVcfContacts([{ name: 'GL10-001', phone: '573138497058' }])
 
-    expect(content).not.toContain('FN:')
-    expect(content).toContain('N:;;GL10-001;;;')
+    expect(content).toContain('FN:GL10-001')
+    expect(content).not.toContain('N:;;')
     expect(content).toContain('TEL;TYPE=CELL:573138497058')
   })
 
-  it('can remove FN lines from standard VCF content', () => {
-    const standard = writeVcfContacts([{ name: 'GL10-001', phone: '573138497058' }])
-    const compact = formatVcfNameLines(standard, 'legacy-n-only')
+  it('renames existing VCF blocks into FN-only contacts', () => {
+    const renamed = replaceNameInVcfBlock(
+      ['BEGIN:VCARD', 'VERSION:3.0', 'FN:OLD', 'N:;;OLD;;;', 'TEL;TYPE=CELL:1', 'END:VCARD'].join('\n'),
+      'NEW',
+    )
 
-    expect(compact).not.toContain('FN:')
-    expect(compact).toContain('N:;;GL10-001;;;')
+    expect(renamed).toContain('FN:NEW')
+    expect(renamed).not.toContain('N:;;')
   })
 })
