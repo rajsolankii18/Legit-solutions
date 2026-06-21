@@ -104,6 +104,27 @@ describe('RAJ conversion', () => {
     expect(outputs[1].content).not.toContain('N:;;')
   })
 
+  it('keeps numeric identity separate from the contact counter with fixed bases', () => {
+    const outputs = convertTxtFilesToRajVcfJob(
+      [{ fileName: 'GLA10_NAVY.txt', text: '573138497058\n573136994187' }],
+      {
+        fileNaming: { mode: 'manual', namesByFileName: { 'GLA10_NAVY.txt': 'GLA10_NAVY.vcf' } },
+        contactNaming: { mode: 'fixed', baseName: 'NAVY_GLA10' },
+        filters: {
+          phoneMode: 'smart',
+          duplicatePolicy: 'keep',
+          includeReports: false,
+        },
+      },
+    )
+
+    expect(outputs[0].fileName).toBe('GLA10_NAVY.vcf')
+    expect(outputs[0].content).toContain('FN:NAVY_GLA10-001')
+    expect(outputs[0].content).toContain('FN:NAVY_GLA10-002')
+    expect(outputs[0].content).not.toContain('FN:NAVY_GLA101')
+    expect(outputs[0].content).not.toContain('N:;;')
+  })
+
   it('supports alphabetic contact bases', () => {
     const outputs = convertTxtFilesToRajVcf(
       [

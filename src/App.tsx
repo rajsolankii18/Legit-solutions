@@ -209,6 +209,11 @@ function buildWorkbenchUrl() {
   return `${url.pathname}${url.search}${url.hash}`
 }
 
+function getPastedSourceFileName(vcfFileName: string) {
+  const trimmed = vcfFileName.trim() || 'pasted.vcf'
+  return trimmed.replace(/\.vcf$/i, '.txt')
+}
+
 function readStoredWorkspaceVcfSources(): TextInputFile[] {
   if (typeof window === 'undefined') return []
 
@@ -276,6 +281,14 @@ function App() {
   const [adminCustomPrefix, setAdminCustomPrefix] = useState('')
   const [pastedNumbers, setPastedNumbers] = useState('')
   const [pastedVcfFileName, setPastedVcfFileName] = useState('pasted.vcf')
+  const [quickVcfNamingMode, setQuickVcfNamingMode] = useState<RajFileNaming['mode']>('input-name')
+  const [quickVcfBaseName, setQuickVcfBaseName] = useState('VCF')
+  const [quickVcfStartNumber, setQuickVcfStartNumber] = useState('1')
+  const [quickContactNamingMode, setQuickContactNamingMode] = useState<RajContactNaming['mode']>('fixed')
+  const [quickContactBaseName, setQuickContactBaseName] = useState('CONTACT')
+  const [quickManualContactBase, setQuickManualContactBase] = useState('CONTACT')
+  const [quickAlphabeticLength, setQuickAlphabeticLength] = useState('2')
+  const [quickAlphabeticRunIndex, setQuickAlphabeticRunIndex] = useState('0')
   const [renameAfterCreate, setRenameAfterCreate] = useState(false)
   const [renameMode, setRenameMode] = useState<'single' | 'split' | 'admin-navy'>('single')
   const [renameCount, setRenameCount] = useState('10')
@@ -348,6 +361,28 @@ function App() {
     text: '9876543210',
   }))
   const rajPreview = rajPreviewFiles.length ? convertTxtFilesToRajVcf(rajPreviewFiles, rajOptions) : []
+  const pastedSourceFileName = getPastedSourceFileName(pastedVcfFileName)
+  const quickForgeOptions = {
+    fileNaming: buildRajFileNaming({
+      mode: quickVcfNamingMode,
+      baseName: quickVcfBaseName,
+      startNumber: quickVcfStartNumber,
+      namesByFileName: { [pastedSourceFileName]: pastedVcfFileName },
+    }),
+    contactNaming: buildRajContactNaming({
+      mode: quickContactNamingMode,
+      baseName: quickContactBaseName,
+      fallbackBaseName: quickManualContactBase,
+      basesByFileName: { [pastedSourceFileName]: quickManualContactBase },
+      alphabeticLength: quickAlphabeticLength,
+      alphabeticRunIndex: quickAlphabeticRunIndex,
+    }),
+    filters: {
+      phoneMode: phoneCleanMode,
+      duplicatePolicy,
+      includeReports,
+    },
+  }
   const activeToolDefinition = tools.find((tool) => tool.id === activeTool) ?? tools[0]
   const isWorkbenchPage = pageMode === 'workbench'
 
@@ -525,11 +560,8 @@ function App() {
       if (activeTool === 'paste-vcf') {
         if (!pastedNumbers.trim()) throw new Error('Paste phone numbers first.')
         nextOutputs = convertTxtFilesToRajVcfJob(
-          [{ fileName: pastedVcfFileName.replace(/\.vcf$/i, '.txt'), text: pastedNumbers }],
-          {
-            ...rajOptions,
-            fileNaming: { mode: 'manual', namesByFileName: { [pastedVcfFileName.replace(/\.vcf$/i, '.txt')]: pastedVcfFileName } },
-          },
+          [{ fileName: pastedSourceFileName, text: pastedNumbers }],
+          quickForgeOptions,
         )
         if (renameAfterCreate) {
           nextOutputs = renameGeneratedVcfOutputs(nextOutputs, buildRenameStartingOptions({
@@ -1319,7 +1351,6 @@ function App() {
 
               {activeTool === 'paste-vcf' && (
                 <div className="space-y-4">
-                  <TextField label="VCF filename" value={pastedVcfFileName} onChange={setPastedVcfFileName} placeholder="pasted.vcf" />
                   <label className="block text-sm font-medium text-slate-700">
                     Phone numbers
                     <textarea
@@ -1329,7 +1360,110 @@ function App() {
                       placeholder={'9876543210\n+91 98765-43210'}
                     />
                   </label>
-                  <TextField label="Contact base name" value={contactBaseName} onChange={setContactBaseName} placeholder="TES" />
+
+                  <div className="space-y-4 rounded-xl border border-teal-200 bg-teal-50/50 p-3">
+                    <div className="text-sm font-semibold text-teal-950">VCF creation naming</div>
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700" htmlFor="quick-vcf-naming">
+                        VCF file naming
+                      </label>
+                      <select
+                        id="quick-vcf-naming"
+                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                        value={quickVcfNamingMode}
+                        onChange={(event) => setQuickVcfNamingMode(event.target.value as RajFileNaming['mode'])}
+                      >
+                        <option value="input-name">Use VCF filename field</option>
+                        <option value="sequential">Base name + number</option>
+                        <option value="manual">Manual VCF filename</option>
+                      </select>
+                    </div>
+
+                    {(quickVcfNamingMode === 'input-name' || quickVcfNamingMode === 'manual') && (
+                      <TextField
+                        label="VCF filename"
+                        value={pastedVcfFileName}
+                        onChange={setPastedVcfFileName}
+                        placeholder="GLA10_NAVY.vcf"
+                      />
+                    )}
+
+                    {quickVcfNamingMode === 'sequential' && (
+                      <div className="grid gap-3 sm:grid-cols-[1fr_120px]">
+                        <TextField
+                          label="VCF base name"
+                          value={quickVcfBaseName}
+                          onChange={setQuickVcfBaseName}
+                          placeholder="VCF"
+                        />
+                        <TextField
+                          label="Start number"
+                          value={quickVcfStartNumber}
+                          onChange={setQuickVcfStartNumber}
+                          placeholder="1"
+                        />
+                      </div>
+                    )}
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-700" htmlFor="quick-contact-naming">
+                        Contact naming
+                      </label>
+                      <select
+                        id="quick-contact-naming"
+                        className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                        value={quickContactNamingMode}
+                        onChange={(event) =>
+                          setQuickContactNamingMode(event.target.value as RajContactNaming['mode'])
+                        }
+                      >
+                        <option value="fixed">Fixed base + counter</option>
+                        <option value="sequential">Base + same VCF number + counter</option>
+                        <option value="manual-per-file">Manual base for this paste</option>
+                        <option value="alphabetic">Alphabetic base + counter</option>
+                      </select>
+                    </div>
+
+                    {(quickContactNamingMode === 'fixed' || quickContactNamingMode === 'sequential') && (
+                      <TextField
+                        label={
+                          quickContactNamingMode === 'fixed'
+                            ? 'Contact base name'
+                            : 'Contact base name, linked to VCF number'
+                        }
+                        value={quickContactBaseName}
+                        onChange={setQuickContactBaseName}
+                        placeholder={quickContactNamingMode === 'fixed' ? 'NAVY_GLA10' : 'NAVY_GLA'}
+                      />
+                    )}
+
+                    {quickContactNamingMode === 'manual-per-file' && (
+                      <TextField
+                        label="Manual contact base"
+                        value={quickManualContactBase}
+                        onChange={setQuickManualContactBase}
+                        placeholder="NAVY_GLA10"
+                      />
+                    )}
+
+                    {quickContactNamingMode === 'alphabetic' && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <TextField
+                          label="Alphabet length"
+                          value={quickAlphabeticLength}
+                          onChange={setQuickAlphabeticLength}
+                          placeholder="2"
+                        />
+                        <TextField
+                          label="Run index"
+                          value={quickAlphabeticRunIndex}
+                          onChange={setQuickAlphabeticRunIndex}
+                          placeholder="0"
+                        />
+                      </div>
+                    )}
+                  </div>
+
                   <PowerFilters
                     idPrefix="paste"
                     phoneCleanMode={phoneCleanMode}
