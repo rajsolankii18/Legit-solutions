@@ -11,6 +11,8 @@ import {
   Files,
   GitMerge,
   ListChecks,
+  RefreshCw,
+  Send,
   ShieldCheck,
   SlidersHorizontal,
   Smartphone,
@@ -76,6 +78,18 @@ type ComposerSourceOption = {
 
 type ComposerTextSource = ComposerSourceOption & {
   text: string
+}
+
+type TelegramClient = {
+  chat_id: string
+  chat_type: string
+  display_name: string
+  first_name: string | null
+  last_name: string | null
+  last_seen_at: string
+  message_count: number
+  started_at: string
+  username: string | null
 }
 
 const tools: Tool[] = [
@@ -302,6 +316,17 @@ function App() {
   const [plusSafeMode, setPlusSafeMode] = useState(true)
   const [excelMinimumValues, setExcelMinimumValues] = useState('50')
   const [outputFiles, setOutputFiles] = useState<GeneratedFile[]>([])
+  const [telegramAdminPin, setTelegramAdminPin] = useState('')
+  const [telegramCaption, setTelegramCaption] = useState('Your converted contact files are ready.')
+  const [telegramClients, setTelegramClients] = useState<TelegramClient[]>([])
+  const [telegramClientSearch, setTelegramClientSearch] = useState('')
+  const [telegramManualChatId, setTelegramManualChatId] = useState('')
+  const [telegramSelectedChatId, setTelegramSelectedChatId] = useState('')
+  const [telegramStatusLines, setTelegramStatusLines] = useState<string[]>([
+    'Telegram delivery is ready after Cloudflare secrets and webhook are configured.',
+  ])
+  const [isTelegramLoading, setIsTelegramLoading] = useState(false)
+  const [isTelegramSending, setIsTelegramSending] = useState(false)
   const [workspaceVcfSources, setWorkspaceVcfSources] = useState<TextInputFile[]>(readStoredWorkspaceVcfSources)
   const [txtFileTexts, setTxtFileTexts] = useState<Record<string, string>>({})
   const [activeTxtEditorKey, setActiveTxtEditorKey] = useState('')
@@ -322,6 +347,9 @@ function App() {
   const totalItems = outputFiles.reduce((sum, file) => sum + file.itemCount, 0)
   const totalSkipped = outputFiles.reduce((sum, file) => sum + (file.skippedCount ?? 0), 0)
   const workspaceVcfCount = workspaceVcfSources.length
+  const filteredTelegramClients = filterTelegramClients(telegramClients, telegramClientSearch)
+  const telegramRecipientChatId = telegramManualChatId.trim() || telegramSelectedChatId
+  const telegramVcfOutputs = outputFiles.filter((file) => file.kind === 'vcf')
   const editableTxtFiles = txtFiles.map((file) => ({
     file,
     key: getFileKey(file),
@@ -692,13 +720,116 @@ function App() {
       return
     }
 
-    const zip = new JSZip()
-    for (const file of outputFiles) {
-      zip.file(file.fileName, file.content)
+    const blob = await createOutputZipBlob(outputFiles)
+    downloadBlob(blob, `legit-solutions-output-${formatDateForFileName(new Date())}.zip`)
+  }
+
+  async function refreshTelegramClients() {
+    setIsTelegramLoading(true)
+    setTelegramStatusLines(['Refreshing Telegram clients...'])
+    try {
+      const params = new URLSearchParams()
+      if (telegramClientSearch.trim()) params.set('q', telegramClientSearch.trim())
+      const response = await fetch(`/api/telegram/clients?${params.toString()}`, {
+        headers: { 'x-admin-pin': telegramAdminPin },
+      })
+      const payload = await response.json() as { clients?: TelegramClient[]; error?: string; ok?: boolean }
+      if (!response.ok || !payload.ok) throw new Error(payload.error ?? `Request failed: ${response.status}`)
+      const clients = payload.clients ?? []
+      setTelegramClients(clients)
+      if (!telegramSelectedChatId && clients[0]) setTelegramSelectedChatId(clients[0].chat_id)
+      setTelegramStatusLines([
+        clients.length
+          ? `Loaded ${clients.length} Telegram client(s).`
+          : 'No Telegram clients yet. Ask a client to press Start on your bot.',
+      ])
+    } catch (error) {
+      setTelegramStatusLines([
+        error instanceof Error
+          ? `Telegram client refresh failed: ${error.message}`
+          : 'Telegram client refresh failed.',
+      ])
+    } finally {
+      setIsTelegramLoading(false)
+    }
+  }
+
+  async function sendTelegramZip() {
+    if (outputFiles.length === 0) {
+      setTelegramStatusLines(['Generate output files before sending to Telegram.'])
+      return
     }
 
-    const blob = await zip.generateAsync({ type: 'blob' })
-    downloadBlob(blob, `legit-solutions-output-${formatDateForFileName(new Date())}.zip`)
+    const blob = await createOutputZipBlob(outputFiles)
+    await sendTelegramDocument(
+      `legit-solutions-output-${formatDateForFileName(new Date())}.zip`,
+      blob,
+    )
+  }
+
+  async function sendTelegramVcfFiles() {
+    if (telegramVcfOutputs.length === 0) {
+      setTelegramStatusLines(['No VCF output files are available to send.'])
+      return
+    }
+
+    setIsTelegramSending(true)
+    const nextLines = [`Sending ${telegramVcfOutputs.length} VCF file(s) to Telegram...`]
+    setTelegramStatusLines(nextLines)
+    try {
+      for (const file of telegramVcfOutputs) {
+        const blob = new Blob([file.content], { type: getMimeType(file) })
+        await sendTelegramDocument(file.fileName, blob, nextLines, false)
+      }
+      nextLines.push('Telegram delivery complete.')
+      setTelegramStatusLines([...nextLines])
+    } finally {
+      setIsTelegramSending(false)
+    }
+  }
+
+  async function sendTelegramDocument(
+    fileName: string,
+    blob: Blob,
+    existingLines: string[] = [],
+    manageSendingState = true,
+  ) {
+    if (!telegramRecipientChatId) {
+      setTelegramStatusLines(['Select a Telegram client or enter a manual chat ID.'])
+      return
+    }
+    if (!telegramAdminPin.trim()) {
+      setTelegramStatusLines(['Enter your Telegram admin PIN first.'])
+      return
+    }
+
+    if (manageSendingState) {
+      setIsTelegramSending(true)
+      setTelegramStatusLines([`Sending ${fileName} to Telegram...`])
+    }
+
+    const lines = existingLines
+    try {
+      const form = new FormData()
+      form.set('chatId', telegramRecipientChatId)
+      form.set('caption', telegramCaption)
+      form.set('document', blob, fileName)
+      const response = await fetch('/api/telegram/send', {
+        method: 'POST',
+        headers: { 'x-admin-pin': telegramAdminPin },
+        body: form,
+      })
+      const payload = await response.json() as { error?: string; fileName?: string; ok?: boolean }
+      if (!response.ok || !payload.ok) throw new Error(payload.error ?? `Request failed: ${response.status}`)
+      lines.push(`Sent: ${payload.fileName ?? fileName}`)
+      setTelegramStatusLines([...lines])
+    } catch (error) {
+      lines.push(error instanceof Error ? `Failed: ${fileName} - ${error.message}` : `Failed: ${fileName}`)
+      setTelegramStatusLines([...lines])
+      if (manageSendingState) return
+    } finally {
+      if (manageSendingState) setIsTelegramSending(false)
+    }
   }
 
   return (
@@ -1847,6 +1978,103 @@ function App() {
             )}
           </Panel>
 
+          <Panel title="Telegram Delivery" icon={<Send className="h-5 w-5" />}>
+            <div className="space-y-4">
+              <div className="grid gap-3 lg:grid-cols-2">
+                <TextField
+                  label="Admin PIN"
+                  value={telegramAdminPin}
+                  onChange={setTelegramAdminPin}
+                  placeholder="Private Cloudflare PIN"
+                />
+                <TextField
+                  label="Search clients"
+                  value={telegramClientSearch}
+                  onChange={setTelegramClientSearch}
+                  placeholder="Name, username, or chat ID"
+                />
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-800 transition hover:bg-teal-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:text-slate-400 disabled:active:scale-100 sm:w-auto"
+                  onClick={refreshTelegramClients}
+                  disabled={isTelegramLoading || !telegramAdminPin.trim()}
+                >
+                  <RefreshCw className="h-4 w-4" />
+                  {isTelegramLoading ? 'Refreshing...' : 'Refresh clients'}
+                </button>
+              </div>
+
+              <div className="grid gap-3 lg:grid-cols-2">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700" htmlFor="telegram-client">
+                    Saved Telegram client
+                  </label>
+                  <select
+                    id="telegram-client"
+                    className="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                    value={telegramSelectedChatId}
+                    onChange={(event) => setTelegramSelectedChatId(event.target.value)}
+                  >
+                    <option value="">Select saved client</option>
+                    {filteredTelegramClients.map((client) => (
+                      <option key={client.chat_id} value={client.chat_id}>
+                        {formatTelegramClientLabel(client)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <TextField
+                  label="Manual chat ID"
+                  value={telegramManualChatId}
+                  onChange={setTelegramManualChatId}
+                  placeholder="Optional direct chat ID"
+                />
+              </div>
+
+              <label className="block text-sm font-medium text-slate-700">
+                Caption
+                <textarea
+                  className="mt-2 min-h-24 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-normal text-slate-950 outline-none transition focus:border-teal-600 focus:ring-2 focus:ring-teal-100"
+                  value={telegramCaption}
+                  onChange={(event) => setTelegramCaption(event.target.value)}
+                  placeholder="Message to send with the file"
+                />
+              </label>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md bg-teal-700 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-teal-800 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none disabled:active:scale-100 sm:w-auto"
+                  onClick={sendTelegramZip}
+                  disabled={isTelegramSending || outputFiles.length === 0}
+                >
+                  <FileArchive className="h-4 w-4" />
+                  {isTelegramSending ? 'Sending...' : 'Send ZIP'}
+                </button>
+                <button
+                  type="button"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:text-slate-400 disabled:active:scale-100 sm:w-auto"
+                  onClick={sendTelegramVcfFiles}
+                  disabled={isTelegramSending || telegramVcfOutputs.length === 0}
+                >
+                  <Files className="h-4 w-4" />
+                  Send VCFs ({telegramVcfOutputs.length})
+                </button>
+              </div>
+
+              <div className="max-h-44 space-y-2 overflow-auto rounded-xl bg-slate-950 p-3 font-mono text-xs text-slate-200 shadow-inner">
+                {telegramStatusLines.map((line) => (
+                  <div key={line} className="rounded-md bg-white/5 px-3 py-2 ring-1 ring-white/10">
+                    {line}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </Panel>
+
           <Panel title="Safety Rules" icon={<ShieldCheck className="h-5 w-5" />}>
             <ul className="space-y-3 text-sm leading-6 text-slate-600">
               <li>Original uploaded files are never overwritten.</li>
@@ -2393,6 +2621,36 @@ function formatPreviewContent(content: string) {
   const limit = 50000
   if (content.length <= limit) return content || 'Empty file'
   return `${content.slice(0, limit)}\n\n--- Preview truncated at ${limit.toLocaleString()} characters ---`
+}
+
+async function createOutputZipBlob(files: GeneratedFile[]) {
+  const zip = new JSZip()
+  for (const file of files) {
+    zip.file(file.fileName, file.content)
+  }
+  return zip.generateAsync({ type: 'blob' })
+}
+
+function filterTelegramClients(clients: TelegramClient[], query: string) {
+  const normalizedQuery = query.trim().toLowerCase()
+  if (!normalizedQuery) return clients
+  return clients.filter((client) =>
+    [
+      client.chat_id,
+      client.display_name,
+      client.first_name ?? '',
+      client.last_name ?? '',
+      client.username ?? '',
+    ]
+      .join(' ')
+      .toLowerCase()
+      .includes(normalizedQuery),
+  )
+}
+
+function formatTelegramClientLabel(client: TelegramClient) {
+  const username = client.username ? `@${client.username}` : 'no username'
+  return `${client.display_name} - ${username} - ${client.chat_id}`
 }
 
 function buildRajFileNaming({

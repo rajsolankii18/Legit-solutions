@@ -1,0 +1,8 @@
+name = "legit-solutions"
+compatibility_date = "2026-06-22"
+pages_build_output_dir = "dist"
+
+[[d1_databases]]
+binding = "TELEGRAM_DB"
+database_name = "legit_telegram_clients"
+database_id = "d0889489-b3c6-4e5e-96a4-d5ecdb50f75c"
