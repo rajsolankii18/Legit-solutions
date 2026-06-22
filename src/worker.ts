@@ -70,6 +70,10 @@ export default {
         return getTelegramClients(request, env)
       }
 
+      if (url.pathname === '/api/telegram/status' && request.method === 'GET') {
+        return getTelegramStatus(request, env)
+      }
+
       if (url.pathname === '/api/telegram/send' && request.method === 'POST') {
         return sendTelegramDocument(request, env)
       }
@@ -117,6 +121,28 @@ async function getTelegramClients(request: Request, env: Env) {
     .all<TelegramClientRow>()
 
   return jsonResponse({ ok: true, clients: result.results ?? [] })
+}
+
+async function getTelegramStatus(request: Request, env: Env) {
+  if (!hasAdminAccess(request, env)) {
+    return jsonResponse({ ok: false, error: 'Invalid admin PIN.' }, { status: 401 })
+  }
+
+  const db = requireTelegramDb(env)
+  const token = requireBotToken(env)
+  await ensureTelegramTables(db)
+
+  const clientCount = await db
+    .prepare(`SELECT COUNT(*) AS count FROM telegram_clients`)
+    .all<{ count: number }>()
+  const webhookResponse = await fetch(`https://api.telegram.org/bot${token}/getWebhookInfo`)
+  const webhookInfo = await webhookResponse.json()
+
+  return jsonResponse({
+    ok: true,
+    clientCount: clientCount.results?.[0]?.count ?? 0,
+    webhookInfo,
+  })
 }
 
 async function sendTelegramDocument(request: Request, env: Env) {

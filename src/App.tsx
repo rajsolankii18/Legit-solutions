@@ -269,6 +269,7 @@ function App() {
   const [manualVcfNames, setManualVcfNames] = useState<Record<string, string>>({})
   const [contactNamingMode, setContactNamingMode] = useState<RajContactNaming['mode']>('sequential')
   const [contactBaseName, setContactBaseName] = useState('TES')
+  const [contactStartNumber, setContactStartNumber] = useState('')
   const [manualContactFallback, setManualContactFallback] = useState('CONTACT')
   const [manualContactBases, setManualContactBases] = useState<Record<string, string>>({})
   const [alphabeticLength, setAlphabeticLength] = useState('2')
@@ -300,6 +301,7 @@ function App() {
   const [quickVcfStartNumber, setQuickVcfStartNumber] = useState('1')
   const [quickContactNamingMode, setQuickContactNamingMode] = useState<RajContactNaming['mode']>('fixed')
   const [quickContactBaseName, setQuickContactBaseName] = useState('CONTACT')
+  const [quickContactStartNumber, setQuickContactStartNumber] = useState('')
   const [quickManualContactBase, setQuickManualContactBase] = useState('CONTACT')
   const [quickAlphabeticLength, setQuickAlphabeticLength] = useState('2')
   const [quickAlphabeticRunIndex, setQuickAlphabeticRunIndex] = useState('0')
@@ -322,6 +324,7 @@ function App() {
   const [telegramClientSearch, setTelegramClientSearch] = useState('')
   const [telegramManualChatId, setTelegramManualChatId] = useState('')
   const [telegramSelectedChatId, setTelegramSelectedChatId] = useState('')
+  const [telegramWebhookStatus, setTelegramWebhookStatus] = useState('')
   const [telegramStatusLines, setTelegramStatusLines] = useState<string[]>([
     'Telegram delivery is ready after Cloudflare secrets and webhook are configured.',
   ])
@@ -373,6 +376,7 @@ function App() {
     contactNaming: buildRajContactNaming({
       mode: contactNamingMode,
       baseName: contactBaseName,
+      startNumber: contactStartNumber,
       fallbackBaseName: manualContactFallback,
       basesByFileName: manualContactBases,
       alphabeticLength,
@@ -400,6 +404,7 @@ function App() {
     contactNaming: buildRajContactNaming({
       mode: quickContactNamingMode,
       baseName: quickContactBaseName,
+      startNumber: quickContactStartNumber,
       fallbackBaseName: quickManualContactBase,
       basesByFileName: { [pastedSourceFileName]: quickManualContactBase },
       alphabeticLength: quickAlphabeticLength,
@@ -748,6 +753,49 @@ function App() {
         error instanceof Error
           ? `Telegram client refresh failed: ${error.message}`
           : 'Telegram client refresh failed.',
+      ])
+    } finally {
+      setIsTelegramLoading(false)
+    }
+  }
+
+  async function checkTelegramWebhook() {
+    setIsTelegramLoading(true)
+    setTelegramStatusLines(['Checking Telegram webhook...'])
+    try {
+      const response = await fetch('/api/telegram/status', {
+        headers: { 'x-admin-pin': telegramAdminPin },
+      })
+      const payload = await response.json() as {
+        clientCount?: number
+        error?: string
+        ok?: boolean
+        webhookInfo?: {
+          ok?: boolean
+          result?: {
+            last_error_date?: number
+            last_error_message?: string
+            pending_update_count?: number
+            url?: string
+          }
+        }
+      }
+      if (!response.ok || !payload.ok) throw new Error(payload.error ?? `Request failed: ${response.status}`)
+      const result = payload.webhookInfo?.result
+      const lines = [
+        `Saved Telegram clients: ${payload.clientCount ?? 0}`,
+        `Webhook URL: ${result?.url || 'not set'}`,
+        `Pending updates: ${result?.pending_update_count ?? 0}`,
+      ]
+      if (result?.last_error_message) lines.push(`Last Telegram error: ${result.last_error_message}`)
+      setTelegramWebhookStatus(result?.url ? 'Webhook is set.' : 'Webhook is not set.')
+      setTelegramStatusLines(lines)
+    } catch (error) {
+      setTelegramWebhookStatus('Webhook check failed.')
+      setTelegramStatusLines([
+        error instanceof Error
+          ? `Webhook check failed: ${error.message}`
+          : 'Webhook check failed.',
       ])
     } finally {
       setIsTelegramLoading(false)
@@ -1201,16 +1249,26 @@ function App() {
                 </div>
 
                 {(contactNamingMode === 'fixed' || contactNamingMode === 'sequential') && (
-                  <TextField
-                    label={
-                      contactNamingMode === 'fixed'
-                        ? 'Contact base name'
-                        : 'Contact base name, linked to VCF number'
-                    }
-                    value={contactBaseName}
-                    onChange={setContactBaseName}
-                    placeholder={contactNamingMode === 'sequential' ? 'TES' : 'CONTACT'}
-                  />
+                  <div className={contactNamingMode === 'sequential' ? 'grid gap-3 sm:grid-cols-[1fr_160px]' : ''}>
+                    <TextField
+                      label={
+                        contactNamingMode === 'fixed'
+                          ? 'Contact base name'
+                          : 'Contact base name, linked to VCF number'
+                      }
+                      value={contactBaseName}
+                      onChange={setContactBaseName}
+                      placeholder={contactNamingMode === 'sequential' ? 'TES' : 'CONTACT'}
+                    />
+                    {contactNamingMode === 'sequential' && (
+                      <TextField
+                        label="Linked start number"
+                        value={contactStartNumber}
+                        onChange={setContactStartNumber}
+                        placeholder="Auto or 11"
+                      />
+                    )}
+                  </div>
                 )}
 
                 {contactNamingMode === 'manual-per-file' && (
@@ -1556,16 +1614,26 @@ function App() {
                     </div>
 
                     {(quickContactNamingMode === 'fixed' || quickContactNamingMode === 'sequential') && (
-                      <TextField
-                        label={
-                          quickContactNamingMode === 'fixed'
-                            ? 'Contact base name'
-                            : 'Contact base name, linked to VCF number'
-                        }
-                        value={quickContactBaseName}
-                        onChange={setQuickContactBaseName}
-                        placeholder={quickContactNamingMode === 'fixed' ? 'NAVY_GLA10' : 'NAVY_GLA'}
-                      />
+                      <div className={quickContactNamingMode === 'sequential' ? 'grid gap-3 sm:grid-cols-[1fr_160px]' : ''}>
+                        <TextField
+                          label={
+                            quickContactNamingMode === 'fixed'
+                              ? 'Contact base name'
+                              : 'Contact base name, linked to VCF number'
+                          }
+                          value={quickContactBaseName}
+                          onChange={setQuickContactBaseName}
+                          placeholder={quickContactNamingMode === 'fixed' ? 'NAVY_GLA10' : 'NAVY_GLA'}
+                        />
+                        {quickContactNamingMode === 'sequential' && (
+                          <TextField
+                            label="Linked start number"
+                            value={quickContactStartNumber}
+                            onChange={setQuickContactStartNumber}
+                            placeholder="Auto or 11"
+                          />
+                        )}
+                      </div>
                     )}
 
                     {quickContactNamingMode === 'manual-per-file' && (
@@ -1700,16 +1768,26 @@ function App() {
                       </div>
 
                       {(contactNamingMode === 'fixed' || contactNamingMode === 'sequential') && (
-                        <TextField
-                          label={
-                            contactNamingMode === 'fixed'
-                              ? 'Contact base name'
-                              : 'Contact base name, linked to VCF number'
-                          }
-                          value={contactBaseName}
-                          onChange={setContactBaseName}
-                          placeholder={contactNamingMode === 'sequential' ? 'TES' : 'CONTACT'}
-                        />
+                        <div className={contactNamingMode === 'sequential' ? 'grid gap-3 sm:grid-cols-[1fr_160px]' : ''}>
+                          <TextField
+                            label={
+                              contactNamingMode === 'fixed'
+                                ? 'Contact base name'
+                                : 'Contact base name, linked to VCF number'
+                            }
+                            value={contactBaseName}
+                            onChange={setContactBaseName}
+                            placeholder={contactNamingMode === 'sequential' ? 'TES' : 'CONTACT'}
+                          />
+                          {contactNamingMode === 'sequential' && (
+                            <TextField
+                              label="Linked start number"
+                              value={contactStartNumber}
+                              onChange={setContactStartNumber}
+                              placeholder="Auto or 11"
+                            />
+                          )}
+                        </div>
                       )}
 
                       {contactNamingMode === 'manual-per-file' && (
@@ -2005,7 +2083,22 @@ function App() {
                   <RefreshCw className="h-4 w-4" />
                   {isTelegramLoading ? 'Refreshing...' : 'Refresh clients'}
                 </button>
+                <button
+                  type="button"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-4 py-2 text-sm font-semibold text-sky-800 transition hover:bg-sky-100 active:scale-[0.98] disabled:cursor-not-allowed disabled:text-slate-400 disabled:active:scale-100 sm:w-auto"
+                  onClick={checkTelegramWebhook}
+                  disabled={isTelegramLoading || !telegramAdminPin.trim()}
+                >
+                  <ShieldCheck className="h-4 w-4" />
+                  Check webhook
+                </button>
               </div>
+
+              {telegramWebhookStatus && (
+                <div className="rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-900">
+                  {telegramWebhookStatus}
+                </div>
+              )}
 
               <div className="grid gap-3 lg:grid-cols-2">
                 <div>
@@ -2678,6 +2771,7 @@ function buildRajFileNaming({
 function buildRajContactNaming({
   mode,
   baseName,
+  startNumber,
   fallbackBaseName,
   basesByFileName,
   alphabeticLength,
@@ -2685,13 +2779,17 @@ function buildRajContactNaming({
 }: {
   mode: RajContactNaming['mode']
   baseName: string
+  startNumber: string
   fallbackBaseName: string
   basesByFileName: Record<string, string>
   alphabeticLength: string
   alphabeticRunIndex: string
 }): RajContactNaming {
   if (mode === 'manual-per-file') return { mode, basesByFileName, fallbackBaseName }
-  if (mode === 'sequential') return { mode, baseName }
+  if (mode === 'sequential') {
+    const parsedStartNumber = parseOptionalInteger(startNumber)
+    return parsedStartNumber === undefined ? { mode, baseName } : { mode, baseName, startNumber: parsedStartNumber }
+  }
   if (mode === 'alphabetic') {
     return {
       mode,
@@ -2705,6 +2803,12 @@ function buildRajContactNaming({
 function parseInteger(value: string, fallback: number) {
   const parsed = Number.parseInt(value, 10)
   return Number.isFinite(parsed) ? parsed : fallback
+}
+
+function parseOptionalInteger(value: string) {
+  if (!value.trim()) return undefined
+  const parsed = Number.parseInt(value, 10)
+  return Number.isFinite(parsed) ? parsed : undefined
 }
 
 function buildTxtSplitOptions(

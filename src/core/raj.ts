@@ -11,7 +11,7 @@ export type RajFileNaming =
 
 export type RajContactNaming =
   | { mode: 'manual-per-file'; basesByFileName: Record<string, string>; fallbackBaseName: string }
-  | { mode: 'sequential'; baseName: string }
+  | { mode: 'sequential'; baseName: string; startNumber?: number }
   | { mode: 'alphabetic'; length: number; runIndex: number }
   | { mode: 'fixed'; baseName: string }
 
@@ -269,7 +269,10 @@ function resolveContactBase(
 
   if (contactNaming.mode === 'sequential') {
     const base = contactNaming.baseName.trim() || 'CONTACT'
-    return `${base}${fileIndex}`
+    const linkedIndex = contactNaming.startNumber === undefined
+      ? fileIndex
+      : contactNaming.startNumber + fileIndex - 1
+    return `${base}${linkedIndex}`
   }
 
   if (contactNaming.mode === 'alphabetic') {

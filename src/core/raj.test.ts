@@ -104,6 +104,25 @@ describe('RAJ conversion', () => {
     expect(outputs[1].content).not.toContain('N:;;')
   })
 
+  it('supports a custom linked contact start number for input-name files', () => {
+    const outputs = convertTxtFilesToRajVcf(
+      [
+        { fileName: 'GL10_11.txt', text: '9876543210' },
+        { fileName: 'GL10_12.txt', text: '9876543211' },
+      ],
+      {
+        fileNaming: { mode: 'input-name' },
+        contactNaming: { mode: 'sequential', baseName: 'GLA', startNumber: 11 },
+      },
+    )
+
+    expect(outputs[0].fileName).toBe('GL10_11.vcf')
+    expect(outputs[1].fileName).toBe('GL10_12.vcf')
+    expect(outputs[0].content).toContain('FN:GLA11-001')
+    expect(outputs[1].content).toContain('FN:GLA12-001')
+    expect(outputs[0].content).not.toContain('FN:GLA1-001')
+  })
+
   it('keeps numeric identity separate from the contact counter with fixed bases', () => {
     const outputs = convertTxtFilesToRajVcfJob(
       [{ fileName: 'GLA10_NAVY.txt', text: '573138497058\n573136994187' }],
