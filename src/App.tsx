@@ -200,6 +200,7 @@ const logLines = [
 ]
 
 const WORKSPACE_VCF_STORAGE_KEY = 'legit-solutions.workspace-vcf-sources'
+const TELEGRAM_ADMIN_PIN_STORAGE_KEY = 'legit-solutions.telegram-admin-pin'
 
 function getInitialToolFromUrl(): ToolId | null {
   if (typeof window === 'undefined') return null
@@ -226,6 +227,30 @@ function buildWorkbenchUrl() {
 function getPastedSourceFileName(vcfFileName: string) {
   const trimmed = vcfFileName.trim() || 'pasted.vcf'
   return trimmed.replace(/\.vcf$/i, '.txt')
+}
+
+function readStoredTelegramAdminPin() {
+  if (typeof window === 'undefined') return ''
+
+  try {
+    return window.localStorage.getItem(TELEGRAM_ADMIN_PIN_STORAGE_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+
+function writeStoredTelegramAdminPin(pin: string) {
+  if (typeof window === 'undefined') return
+
+  try {
+    if (pin.trim()) {
+      window.localStorage.setItem(TELEGRAM_ADMIN_PIN_STORAGE_KEY, pin)
+    } else {
+      window.localStorage.removeItem(TELEGRAM_ADMIN_PIN_STORAGE_KEY)
+    }
+  } catch {
+    // The PIN is only a convenience cache. Delivery still works when typed manually.
+  }
 }
 
 function readStoredWorkspaceVcfSources(): TextInputFile[] {
@@ -318,7 +343,7 @@ function App() {
   const [plusSafeMode, setPlusSafeMode] = useState(true)
   const [excelMinimumValues, setExcelMinimumValues] = useState('50')
   const [outputFiles, setOutputFiles] = useState<GeneratedFile[]>([])
-  const [telegramAdminPin, setTelegramAdminPin] = useState('')
+  const [telegramAdminPin, setTelegramAdminPin] = useState(readStoredTelegramAdminPin)
   const [telegramCaption, setTelegramCaption] = useState('Your converted contact files are ready.')
   const [telegramClients, setTelegramClients] = useState<TelegramClient[]>([])
   const [telegramClientSearch, setTelegramClientSearch] = useState('')
@@ -422,6 +447,10 @@ function App() {
   useEffect(() => {
     writeStoredWorkspaceVcfSources(workspaceVcfSources)
   }, [workspaceVcfSources])
+
+  useEffect(() => {
+    writeStoredTelegramAdminPin(telegramAdminPin)
+  }, [telegramAdminPin])
 
   useEffect(() => {
     function syncWorkspaceSources(event: StorageEvent) {
@@ -738,7 +767,7 @@ function App() {
       const response = await fetch(`/api/telegram/clients?${params.toString()}`, {
         headers: { 'x-admin-pin': telegramAdminPin },
       })
-      const payload = await response.json() as { clients?: TelegramClient[]; error?: string; ok?: boolean }
+      const payload = await readApiJson<{ clients?: TelegramClient[]; error?: string; ok?: boolean }>(response)
       if (!response.ok || !payload.ok) throw new Error(payload.error ?? `Request failed: ${response.status}`)
       const clients = payload.clients ?? []
       setTelegramClients(clients)
@@ -766,7 +795,7 @@ function App() {
       const response = await fetch('/api/telegram/status', {
         headers: { 'x-admin-pin': telegramAdminPin },
       })
-      const payload = await response.json() as {
+      const payload = await readApiJson<{
         clientCount?: number
         error?: string
         ok?: boolean
@@ -779,7 +808,7 @@ function App() {
             url?: string
           }
         }
-      }
+      }>(response)
       if (!response.ok || !payload.ok) throw new Error(payload.error ?? `Request failed: ${response.status}`)
       const result = payload.webhookInfo?.result
       const lines = [
@@ -867,7 +896,7 @@ function App() {
         headers: { 'x-admin-pin': telegramAdminPin },
         body: form,
       })
-      const payload = await response.json() as { error?: string; fileName?: string; ok?: boolean }
+      const payload = await readApiJson<{ error?: string; fileName?: string; ok?: boolean }>(response)
       if (!response.ok || !payload.ok) throw new Error(payload.error ?? `Request failed: ${response.status}`)
       lines.push(`Sent: ${payload.fileName ?? fileName}`)
       setTelegramStatusLines([...lines])
@@ -2722,6 +2751,18 @@ async function createOutputZipBlob(files: GeneratedFile[]) {
     zip.file(file.fileName, file.content)
   }
   return zip.generateAsync({ type: 'blob' })
+}
+
+async function readApiJson<T>(response: Response): Promise<T> {
+  const text = await response.text()
+  try {
+    return JSON.parse(text) as T
+  } catch {
+    if (text.trimStart().startsWith('<')) {
+      throw new Error('Telegram API route returned the web app HTML. Deploy the latest Worker and open the workers.dev URL, not local Vite.')
+    }
+    throw new Error(text || `Request failed: ${response.status}`)
+  }
 }
 
 function filterTelegramClients(clients: TelegramClient[], query: string) {
